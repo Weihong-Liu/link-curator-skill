@@ -75,15 +75,40 @@ def check_env_vars() -> Tuple[bool, List[str]]:
     """检查环境变量（不显示值）"""
     print(f"\n{BLUE}[3/7] 检查环境变量{RESET}")
 
-    required = {
-        "FEISHU_APP_ID": "飞书应用 ID",
-        "FEISHU_APP_SECRET": "飞书应用密钥",
-        "FEISHU_BASE_URL": "飞书多维表格 URL",
-    }
+    # 检查是否在 openclaw 环境
+    import json
 
-    optional = {
-        "JINA_API_KEY": "Jina API 密钥（可选）",
-    }
+    openclaw_config = None
+    config_paths = [
+        Path.home() / ".openclaw" / "config.json",
+        Path.home() / ".config" / "openclaw" / "config.json",
+    ]
+
+    for config_path in config_paths:
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config = json.load(f)
+                    if "appId" in config and "appSecret" in config:
+                        openclaw_config = config
+                        break
+            except:
+                pass
+
+    if openclaw_config:
+        print(f"  {GREEN}✓{RESET} 检测到 openclaw 环境")
+        print(f"  {GREEN}✓{RESET} FEISHU_APP_ID = {openclaw_config['appId'][:3]}...{openclaw_config['appId'][-3:]} (来自 openclaw)")
+        print(f"  {GREEN}✓{RESET} FEISHU_APP_SECRET = ****** (来自 openclaw)")
+        # 设置环境变量
+        os.environ["FEISHU_APP_ID"] = openclaw_config["appId"]
+        os.environ["FEISHU_APP_SECRET"] = openclaw_config["appSecret"]
+        required = {"FEISHU_BASE_URL": "飞书多维表格 URL（需要设置为「互联网获得链接的人可编辑」）"}
+    else:
+        required = {
+            "FEISHU_APP_ID": "飞书应用 ID",
+            "FEISHU_APP_SECRET": "飞书应用密钥",
+            "FEISHU_BASE_URL": "飞书多维表格 URL（需要设置为「互联网获得链接的人可编辑」）",
+        }
 
     missing = []
 
@@ -91,12 +116,23 @@ def check_env_vars() -> Tuple[bool, List[str]]:
     for var, desc in required.items():
         value = os.getenv(var)
         if value and value.strip():
-            # 显示部分值（前3后3字符）
             masked = f"{value[:3]}...{value[-3:]}" if len(value) > 6 else "***"
             print(f"  {GREEN}✓{RESET} {var} = {masked}")
         else:
             print(f"  {RED}✗{RESET} {var} - 未设置")
             missing.append(var)
+
+    # 检查可选的环境变量
+    optional = {"JINA_API_KEY": "Jina API 密钥（可选）"}
+    for var, desc in optional.items():
+        value = os.getenv(var)
+        if value and value.strip():
+            masked = f"{value[:3]}...{value[-3:]}" if len(value) > 6 else "***"
+            print(f"  {GREEN}✓{RESET} {var} = {masked} ({desc})")
+        else:
+            print(f"  {YELLOW}○{RESET} {var} - 未设置 ({desc})")
+
+    return len(missing) == 0, missing
 
     # 检查可选的环境变量
     for var, desc in optional.items():

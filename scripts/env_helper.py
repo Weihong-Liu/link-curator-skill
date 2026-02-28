@@ -1,9 +1,45 @@
 """环境检查辅助函数 - 用于 skill 自动检查环境"""
 
+import json
 import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+
+def load_openclaw_config() -> Optional[Dict[str, str]]:
+    """
+    加载 openclaw 配置文件
+
+    Returns:
+        包含 appId 和 appSecret 的字典，如果不是 openclaw 环境则返回 None
+    """
+    # 检查常见的 openclaw 配置路径
+    config_paths = [
+        Path.home() / ".openclaw" / "config.json",
+        Path.home() / ".config" / "openclaw" / "config.json",
+        Path("/etc/openclaw/config.json"),
+    ]
+
+    for config_path in config_paths:
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config = json.load(f)
+                    if "appId" in config and "appSecret" in config:
+                        return {
+                            "FEISHU_APP_ID": config["appId"],
+                            "FEISHU_APP_SECRET": config["appSecret"],
+                        }
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    return None
+
+
+def is_openclaw_environment() -> bool:
+    """检查是否在 openclaw 环境中运行"""
+    return load_openclaw_config() is not None
 
 
 def load_env_file(env_path: Path) -> None:
@@ -26,7 +62,15 @@ def load_env_file(env_path: Path) -> None:
 
 
 def find_and_load_env() -> Optional[Path]:
-    """查找并加载 .env 文件"""
+    """查找并加载 .env 文件，优先使用 openclaw 配置"""
+    # 1. 优先检查 openclaw 配置
+    openclaw_config = load_openclaw_config()
+    if openclaw_config:
+        for key, value in openclaw_config.items():
+            os.environ[key] = value
+        return None  # 表示使用了 openclaw 配置
+
+    # 2. 否则加载 .env 文件
     env_paths = [
         Path.cwd() / ".env",
         Path(__file__).parent.parent / ".env",
@@ -48,7 +92,12 @@ def check_required_env_vars() -> Tuple[bool, List[str]]:
     Returns:
         (是否全部存在, 缺失的变量列表)
     """
-    required = ["FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_BASE_URL"]
+    # openclaw 环境只需要 FEISHU_BASE_URL
+    if is_openclaw_environment():
+        required = ["FEISHU_BASE_URL"]
+    else:
+        required = ["FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_BASE_URL"]
+
     missing = [var for var in required if not os.getenv(var)]
     return len(missing) == 0, missing
 
@@ -134,26 +183,37 @@ def get_missing_env_prompts() -> List[Dict[str, str]]:
 
     questions = []
 
-    env_descriptions = {
-        "FEISHU_APP_ID": {
-            "header": "飞书 App ID",
-            "question": "请提供飞书应用的 App ID",
-            "description": "在飞书开放平台创建应用后获取",
-            "placeholder": "cli_xxxxxxxxxx",
-        },
-        "FEISHU_APP_SECRET": {
-            "header": "飞书 App Secret",
-            "question": "请提供飞书应用的 App Secret",
-            "description": "在飞书开放平台应用凭证页面获取",
-            "placeholder": "密钥字符串",
-        },
-        "FEISHU_BASE_URL": {
-            "header": "飞书表格 URL",
-            "question": "请提供飞书多维表格的 URL",
-            "description": "打开飞书多维表格，复制浏览器地址栏的 URL",
-            "placeholder": "https://xxx.feishu.cn/base/xxxxx",
-        },
-    }
+    # openclaw 环境只需要询问 FEISHU_BASE_URL
+    if is_openclaw_environment():
+        env_descriptions = {
+            "FEISHU_BASE_URL": {
+                "header": "飞书表格 URL",
+                "question": "请提供飞书多维表格的 URL（需要设置为「互联网获得链接的人可编辑」）",
+                "description": "打开飞书多维表格，点击右上角「分享」，设置权限为「互联网获得链接的人可编辑」，然后复制链接",
+                "placeholder": "https://xxx.feishu.cn/base/xxxxx",
+            },
+        }
+    else:
+        env_descriptions = {
+            "FEISHU_APP_ID": {
+                "header": "飞书 App ID",
+                "question": "请提供飞书应用的 App ID",
+                "description": "在飞书开放平台创建应用后获取",
+                "placeholder": "cli_xxxxxxxxxx",
+            },
+            "FEISHU_APP_SECRET": {
+                "header": "飞书 App Secret",
+                "question": "请提供飞书应用的 App Secret",
+                "description": "在飞书开放平台应用凭证页面获取",
+                "placeholder": "密钥字符串",
+            },
+            "FEISHU_BASE_URL": {
+                "header": "飞书表格 URL",
+                "question": "请提供飞书多维表格的 URL（需要设置为「互联网获得链接的人可编辑」）",
+                "description": "打开飞书多维表格，点击右上角「分享」，设置权限为「互联网获得链接的人可编辑」，然后复制链接",
+                "placeholder": "https://xxx.feishu.cn/base/xxxxx",
+            },
+        }
 
     for var in missing:
         if var in env_descriptions:
