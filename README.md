@@ -22,7 +22,7 @@ Link Curator 是一个智能链接收藏和整理工具，可以自动从任意 
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/link-curator.git
+git clone https://github.com/Weihong-Liu/link-curator-skill.git
 cd link-curator
 
 # 安装依赖
@@ -182,5 +182,5 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 📮 联系
 
-如有问题或建议，请提交 [Issue](https://github.com/yourusername/link-curator/issues)
+如有问题或建议，请提交 [Issue](https://github.com/Weihong-Liu/link-curator-skill/issues)
 
