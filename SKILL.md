@@ -134,12 +134,40 @@ uv run python -m scripts.check_env
 
 **如果检查失败**，脚本会给出详细的修复建议。
 
-### 依赖安装
+### Openclaw 环境支持
 
-如果缺少依赖包，运行：
-```bash
-python -m scripts.setup --install
-```
+**自动检测 openclaw 配置**：
+
+如果检测到 openclaw 环境（存在 `~/.openclaw/config.json` 或 `~/.config/openclaw/config.json`），会自动：
+
+1. **使用 openclaw 配置的飞书凭证**：
+   - 自动读取 `appId` 和 `appSecret`
+   - 无需手动配置 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`
+
+2. **只询问 FEISHU_BASE_URL**：
+   - 在 openclaw 环境中，只需要提供飞书多维表格 URL
+   - **重要**：必须设置为「互联网获得链接的人可编辑」权限
+
+3. **字段检查提示**：
+   - 如果飞书表格缺少必需字段，会显示 openclaw 特定的提示
+   - 询问用户是否需要帮助添加缺失字段
+
+**非 openclaw 环境**：
+- 需要手动配置所有三个环境变量：`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_BASE_URL`
+
+### 飞书表格权限设置
+
+**FEISHU_BASE_URL 权限要求**：
+
+1. 打开飞书多维表格
+2. 点击右上角「分享」按钮
+3. 设置权限为：**「互联网获得链接的人可编辑」**
+4. 复制链接作为 `FEISHU_BASE_URL`
+
+⚠️ 如果权限设置不正确，可能导致：
+- 无法读取表格字段
+- 无法创建记录
+- 无法上传封面图片
 
 ### 手动配置
 
