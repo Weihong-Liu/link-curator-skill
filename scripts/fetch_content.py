@@ -69,22 +69,16 @@ class ContentFetcher:
         """
         logger.info(f"Fetching WeChat article: {url}")
 
-        # 使用 Jina Reader API 也可以处理微信文章
-        content = self.fetch_with_jina(url)
-
-        # 简单提取标题（从内容第一行）
-        title = ""
-        if content:
-            lines = content.split("\n")
-            for line in lines[:5]:
-                if line.strip() and not line.startswith("#"):
-                    title = line.strip()
-                    break
+        # 微信文章通常需要专用 MCP 或特殊处理
+        # Jina Reader 对微信文章支持不佳，容易超时
+        logger.warning("微信文章获取失败 - Jina Reader 对微信文章支持有限")
+        logger.warning("建议：使用微信文章专用 MCP 或手动复制内容")
 
         return {
             "url": url,
-            "title": title,
-            "content": content,
+            "title": "微信文章（需要专用工具）",
+            "content": f"⚠️ 微信公众号文章需要专用工具处理\n\n链接: {url}\n\n建议：\n1. 使用微信文章专用 MCP\n2. 或手动复制文章内容",
+            "error": "wechat_not_supported",
         }
 
     def fetch_github_repo(self, url: str) -> dict:
