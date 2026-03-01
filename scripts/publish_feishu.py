@@ -21,6 +21,18 @@ except ImportError:
     print("Error: lark-oapi package not installed. Please install: pip install lark-oapi")
     sys.exit(1)
 
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+    # 从 skill 目录加载 .env
+    skill_dir = Path(__file__).parent.parent
+    env_path = skill_dir / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+        logger.debug(f"Loaded .env from {env_path}")
+except ImportError:
+    pass
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 

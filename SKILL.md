@@ -19,24 +19,18 @@ description: 智能链接策展工具 - 自动抓取、分析、整理和归档�
 
 ### 步骤 1：链接内容提取
 
-根据链接类型使用对应方法提取内容：
-
-**普通网页/技术文章**
-```python
-python -m scripts.fetch_content --url "https://example.com"
+**命令格式**：
+```bash
+cd /path/to/skills/link-curator
+uv run python scripts/fetch_content.py --url "URL" --type auto
 ```
-使用方法：
-- 优先使用 `scripts/fetch_content.py` 中的 `fetch_with_jina()` 函数
-- 在 URL 前加 `https://r.jina.ai/` 前缀即可获取 markdown 格式内容
-- 示例：`https://r.jina.ai/https://github.com/xxx/yyy`
 
-**微信公众号文章**
-```python
-python -m scripts.fetch_content --url "https://mp.weixin.qq.com/s/xxx" --type wechat
-```
-使用方法：
-- 调用 `scripts/fetch_content.py` 中的 `fetch_wechat_article()` 函数
-- 需要使用微信文章专用 MCP 处理
+**支持的链接类型**：
+- 微信公众号：自动使用本地 WeChat 抓取器
+- GitHub 仓库：提取仓库信息和 README
+- 普通网页：使用 Jina Reader API
+
+**输出**：JSON 格式，包含 title、content、author 等字段
 
 ### 步骤 2：内容分析
 
@@ -75,22 +69,28 @@ python -m scripts.fetch_content --url "https://mp.weixin.qq.com/s/xxx" --type we
 
 ### 步骤 3：生成封面
 
-使用封面生成 MCP：
-```python
-python -m scripts.generate_cover --title "标题" --style swiss --output covers/cover.png
+**命令格式**：
+```bash
+cd /path/to/skills/link-curator
+uv run python -m generate_cover_mcp.cli "标题文本" \
+  --subtitle "精选内容·建议收藏" \
+  --style swiss \
+  --output cover.png \
+  --output-dir covers
 ```
 
-调用 `scripts/generate_cover.py` 中的 `generate_cover()` 函数，参数：
-- `title`: 标题文本
-- `subtitle`: 副标题（默认 "精选内容·建议收藏"）
-- `style`: 封面风格（见上方列表）
-- `output`: 输出路径
+**参数说明**：
+- 第一个参数：标题文本（位置参数，必需，不要用 `--title`）
+- `--style`：封面风格（见上方列表）
+- `--output`：输出文件名（不是 `--output-filename`）
+- `--output-dir`：输出目录
 
 ### 步骤 4：发布到飞书
 
-使用飞书发布脚本：
-```python
-python -m scripts.publish_feishu \
+**命令格式**：
+```bash
+cd /path/to/skills/link-curator
+uv run python scripts/publish_feishu.py \
   --title "标题" \
   --summary "摘要" \
   --url "原始链接" \
@@ -98,7 +98,7 @@ python -m scripts.publish_feishu \
   --cover "covers/cover.png"
 ```
 
-调用 `scripts/publish_feishu.py` 中的 `publish_to_feishu()` 函数。
+**注意**：环境变量会自动从 `.env` 文件加载
 
 ## 飞书字段映射
 
@@ -113,141 +113,112 @@ python -m scripts.publish_feishu \
 | 创建日期 | 日期 | 毫秒时间戳（可选） |
 | 封面 | 附件 | 封面图片文件（可选） |
 
-## 环境配置与检查
+## 环境配置
 
-### 自动环境检查（推荐）
+### 1. 配置环境变量
 
-**首次使用前必须运行环境检查**：
+复制 `assets/.env.example` 到 `.env` 并填写配置：
 
 ```bash
-uv run python -m scripts.check_env
+cd /path/to/skills/link-curator
+cp assets/.env.example .env
+# 编辑 .env 文件，填写实际值
 ```
 
-该脚本会检查：
-1. ✓ Python 版本（需要 3.10+）
-2. ✓ 依赖包（httpx, lark_oapi, playwright, mcp）
-3. ✓ 环境变量（脱敏显示，不泄露具体值）
-4. ✓ Playwright 浏览器（封面生成需要）
-5. ✓ 飞书 API 连接测试
-6. ✓ 飞书多维表格字段验证
-7. ✓ 飞书应用权限提示
+**必需配置**：
+- `FEISHU_APP_ID`：飞书应用 ID
+- `FEISHU_APP_SECRET`：飞书应用密钥
+- `FEISHU_BASE_URL`：飞书多维表格 URL（必须设置为「互联网获得链接的人可编辑」权限）
 
-**如果检查失败**，脚本会给出详细的修复建议。
+**可选配置**：
+- `JINA_API_KEY`：Jina API 密钥（不提供则使用免费的 r.jina.ai）
 
-### Openclaw 环境支持
+**Openclaw 用户**：如果使用 openclaw，`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 会自动从 openclaw 配置读取，只需配置 `FEISHU_BASE_URL`。
 
-**自动检测 openclaw 配置**：
-
-如果检测到 openclaw 环境（存在 `~/.openclaw/config.json` 或 `~/.config/openclaw/config.json`），会自动：
-
-1. **使用 openclaw 配置的飞书凭证**：
-   - 自动读取 `appId` 和 `appSecret`
-   - 无需手动配置 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`
-
-2. **只询问 FEISHU_BASE_URL**：
-   - 在 openclaw 环境中，只需要提供飞书多维表格 URL
-   - **重要**：必须设置为「互联网获得链接的人可编辑」权限
-
-3. **字段检查提示**：
-   - 如果飞书表格缺少必需字段，会显示 openclaw 特定的提示
-   - 询问用户是否需要帮助添加缺失字段
-
-**非 openclaw 环境**：
-- 需要手动配置所有三个环境变量：`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_BASE_URL`
-
-### 飞书表格权限设置
-
-**FEISHU_BASE_URL 权限要求**：
-
-1. 打开飞书多维表格
-2. 点击右上角「分享」按钮
-3. 设置权限为：**「互联网获得链接的人可编辑」**
-4. 复制链接作为 `FEISHU_BASE_URL`
-
-⚠️ 如果权限设置不正确，可能导致：
-- 无法读取表格字段
-- 无法创建记录
-- 无法上传封面图片
-
-### 手动配置
-
-需要配置以下环境变量（在项目根目录的 `.env` 文件中）：
+### 2. 安装依赖
 
 ```bash
-# 飞书配置
-FEISHU_APP_ID=your_app_id
-FEISHU_APP_SECRET=your_app_secret
-FEISHU_BASE_URL=https://xxx.feishu.cn/base/app_token
-
-# Jina API（可选，不提供则使用 r.jina.ai 前缀方式）
-JINA_API_KEY=your_jina_api_key
-```
-
-### 安装依赖
-
-使用 uv（推荐）：
-```bash
-pip install uv
+cd /path/to/skills/link-curator
 uv venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv pip install -r assets/requirements.txt
 ```
 
-或使用 pip：
+### 3. 环境检查（可选）
+
 ```bash
-pip install -r assets/requirements.txt
+cd /path/to/skills/link-curator
+uv run python scripts/check_env.py
 ```
 
-## 使用示例
+该脚本会检查 Python 版本、依赖包、环境变量、飞书连接等。
+
+## 完整执行示例
 
 **单个链接处理**：
+
+```bash
+cd /path/to/skills/link-curator
+
+# 1. 提取内容
+uv run python scripts/fetch_content.py \
+  --url "https://mp.weixin.qq.com/s/xxx" \
+  --type auto
+
+# 2. 分析内容（由 LLM 完成）
+# - 生成标题、摘要
+# - 选择类别（1-3个）
+# - 选择封面风格
+
+# 3. 生成封面
+uv run python -m generate_cover_mcp.cli \
+  "文章标题" \
+  --subtitle "精选内容·建议收藏" \
+  --style swiss \
+  --output article_cover.png \
+  --output-dir covers
+
+# 4. 发布到飞书
+uv run python scripts/publish_feishu.py \
+  --title "文章标题" \
+  --url "https://mp.weixin.qq.com/s/xxx" \
+  --summary "文章摘要内容..." \
+  --categories "技术文档,学习资源" \
+  --cover "covers/article_cover.png"
 ```
-用户：帮我分析这个链接并发布到飞书 https://github.com/anthropics/claude-code-skills
 
-处理流程：
-0. 自动检查环境（首次使用或环境变量缺失时）
-1. 使用 fetch_with_jina() 提取内容
-2. LLM 分析生成标题、摘要、类别、封面风格
-3. 生成封面图片
-4. 发布到飞书
+**批量处理**：对每个链接重复上述流程
+
+## 常见问题
+
+### 1. 环境变量未加载
+**现象**：`飞书配置不完整，发布功能将被禁用`
+**解决**：确保 `.env` 文件在 skill 目录下，脚本会自动加载
+
+### 2. 封面生成 CLI 参数错误
+**错误**：`unrecognized arguments: --title`
+**原因**：title 是位置参数，不是选项参数
+**正确**：`uv run python -m generate_cover_mcp.cli "标题" --output cover.png`
+
+### 3. 依赖冲突
+**现象**：`lark-oapi` 版本冲突
+**解决**：在 skill 目录下创建独立虚拟环境：
+```bash
+cd /path/to/skills/link-curator
+uv venv
+uv pip install -r assets/requirements.txt
 ```
 
-**环境检查失败时**：
-- 如果缺少环境变量，会自动询问用户提供
-- 如果缺少依赖，会提示安装命令
-- 如果飞书字段不匹配，会列出缺失字段
-- 如果权限未开启，会提示开启权限
+### 4. 飞书权限问题
+**现象**：无法创建记录或上传封面
+**解决**：确保 `FEISHU_BASE_URL` 对应的表格权限设置为「互联网获得链接的人可编辑」
 
-**批量处理**：
-```
-用户：批量处理这些链接并发布到飞书：
-- https://mp.weixin.qq.com/s/xxx
-- https://github.com/xxx/yyy
-- https://juejin.cn/post/zzz
+## 最佳实践
 
-处理流程：
-对每个链接执行上述完整流程
-```
-
-## 注意事项
-
-1. **内容提取优先级**：
-   - 微信文章：使用专用 MCP
-   - 其他链接：使用 `https://r.jina.ai/` 前缀
-
-2. **分类选择**：
-   - 根据链接域名和内容关键词智能分类
-   - 支持多选，但建议 1-3 个
-
-3. **封面风格选择**：
-   - 根据类别和标题关键词自动选择
-   - 技术/代码类默认 `swiss`
-   - 设计/艺术类默认 `acid`
-
-4. **错误处理**：
-   - 如果内容提取失败，使用 URL 的域名作为标题
-   - 如果封面生成失败，跳过封面继续发布
-   - 如果飞书发布失败，记录错误并处理下一个
+1. **始终在 skill 目录下执行命令**：`cd /path/to/skills/link-curator`
+2. **使用 `uv run python` 确保使用正确的虚拟环境**
+3. **环境变量放在 skill 目录的 `.env` 文件中**
+4. **封面生成使用 CLI 工具**：`python -m generate_cover_mcp.cli`
+5. **检查 CLI 帮助确认参数格式**：`python -m xxx --help`
 
 ## MCP 依赖
 

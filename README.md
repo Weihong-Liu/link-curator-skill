@@ -21,16 +21,12 @@ Link Curator 是一个智能链接收藏和整理工具，可以自动从任意 
 ### 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/Weihong-Liu/link-curator-skill.git
-cd link-curator
+# 进入 skill 目录
+cd /path/to/skills/link-curator
 
-# 安装依赖
-pip install -r assets/requirements.txt
-
-# 安装封面生成依赖
-pip install generate-cover-mcp
-playwright install chromium
+# 创建虚拟环境并安装依赖
+uv venv
+uv pip install -r assets/requirements.txt
 ```
 
 ### 配置
@@ -47,42 +43,109 @@ FEISHU_APP_SECRET=your_app_secret
 FEISHU_BASE_URL=https://xxx.feishu.cn/base/app_token
 ```
 
-3. 运行环境检查：
+**重要**：
+- `.env` 文件必须放在 skill 目录下
+- 脚本会自动加载此文件，无需手动设置环境变量
+- `FEISHU_BASE_URL` 对应的表格必须设置为「互联网获得链接的人可编辑」权限
+
+3. 运行环境检查（可选）：
 ```bash
-python -m scripts.check_env
+uv run python scripts/check_env.py
 ```
 
 ### 使用
 
 #### 作为 Claude Code Skill 使用
 
-将整个目录复制到 `~/.claude/skills/link-curator/`，然后在 Claude Code 中：
+在 Claude Code 中直接使用：
 
 ```
-帮我分析这个链接并发布到飞书：https://github.com/anthropics/claude-code
+帮我整理这个链接并保存到飞书：https://mp.weixin.qq.com/s/xxx
 ```
 
 #### 命令行使用
 
+**重要**：所有命令都必须在 skill 目录下执行
+
 ```bash
-# 单个链接
-python -m scripts.pipeline --url "https://example.com"
+cd /path/to/skills/link-curator
 
-# 批量处理
-python -m scripts.pipeline --urls urls.txt
+# 1. 提取内容
+uv run python scripts/fetch_content.py --url "URL" --type auto
 
-# 只生成封面
-python -m scripts.generate_cover --title "标题" --style swiss
+# 2. 生成封面（注意：title 是位置参数）
+uv run python -m generate_cover_mcp.cli "标题" --style swiss --output cover.png
+
+# 3. 发布到飞书
+uv run python scripts/publish_feishu.py \
+  --title "标题" \
+  --url "URL" \
+  --summary "摘要" \
+  --categories "类别1,类别2" \
+  --cover "covers/cover.png"
 ```
 
 ## 📖 详细文档
+
+### 常见问题
+
+#### 1. 环境变量未加载？
+**现象**：`飞书配置不完整，发布功能将被禁用`
+
+**解决**：
+- 确保 `.env` 文件在 skill 目录下
+- 脚本会自动使用 `python-dotenv` 加载环境变量
+- 不需要手动 `export` 或使用 `source`
+
+#### 2. 封面生成 CLI 参数错误？
+**现象**：`unrecognized arguments: --title`
+
+**原因**：title 是位置参数，不是选项参数
+
+**正确用法**：
+```bash
+# ✓ 正确
+uv run python -m generate_cover_mcp.cli "标题" --output cover.png
+
+# ✗ 错误
+uv run python -m generate_cover_mcp.cli --title "标题" --output-filename cover.png
+```
+
+#### 3. 依赖冲突？
+**现象**：`lark-oapi` 版本冲突
+
+**解决**：在 skill 目录下创建独立虚拟环境
+```bash
+cd /path/to/skills/link-curator
+uv venv
+uv pip install -r assets/requirements.txt
+```
+
+#### 4. 飞书权限问题？
+**现象**：无法创建记录或上传封面
+
+**解决**：
+1. 打开飞书多维表格
+2. 点击右上角「分享」
+3. 设置为「互联网获得链接的人可编辑」
+4. 复制链接作为 `FEISHU_BASE_URL`
+
+#### 5. 工作目录错误？
+**现象**：`No module named scripts.xxx`
+
+**解决**：始终在 skill 目录下执行命令
+```bash
+cd /path/to/skills/link-curator
+uv run python scripts/xxx.py
+```
 
 ### 环境检查
 
 运行完整的环境检查：
 
 ```bash
-python -m scripts.check_env
+cd /path/to/skills/link-curator
+uv run python scripts/check_env.py
 ```
 
 检查内容包括：
@@ -156,14 +219,20 @@ link-curator/
 ### 运行测试
 
 ```bash
+cd /path/to/skills/link-curator
+
 # 测试内容抓取
-python -m scripts.fetch_content --url "https://example.com"
+uv run python scripts/fetch_content.py --url "https://example.com" --type auto
 
 # 测试封面生成
-python -m scripts.generate_cover --title "测试" --style swiss
+uv run python -m generate_cover_mcp.cli "测试标题" --style swiss --output test.png
 
 # 测试飞书发布
-python -m scripts.publish_feishu --title "测试" --url "https://example.com" --summary "测试摘要" --categories "测试"
+uv run python scripts/publish_feishu.py \
+  --title "测试" \
+  --url "https://example.com" \
+  --summary "测试摘要" \
+  --categories "测试"
 ```
 
 ## 🤝 贡献
