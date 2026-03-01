@@ -17,6 +17,22 @@ import httpx
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+# 尝试导入 MCP 服务器功能
+try:
+    from miroflow_tools.mcp_servers.wechat_article_mcp_server import WeChatArticleFetcher
+    WECHAT_MCP_AVAILABLE = True
+except ImportError:
+    WECHAT_MCP_AVAILABLE = False
+    logger.debug("WeChat MCP server not available")
+
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    WEB_SCRAPING_AVAILABLE = True
+except ImportError:
+    WEB_SCRAPING_AVAILABLE = False
+    logger.debug("Web scraping dependencies not available")
+
 
 class ContentFetcher:
     """网页内容抓取器。"""
@@ -41,13 +57,19 @@ class ContentFetcher:
         Returns:
             Markdown 格式的网页内容
         """
-        # 使用 r.jina.ai 前缀方式（不需要 API Key）
-        jina_url = f"https://r.jina.ai/{url}"
-
-        logger.info(f"Fetching content from: {jina_url}")
+        # 如果有 API Key，使用官方 API
+        if self.jina_api_key:
+            jina_url = f"https://r.jina.ai/{url}"
+            headers = {"Authorization": f"Bearer {self.jina_api_key}"}
+            logger.info(f"Using Jina Reader with API key: {jina_url}")
+        else:
+            # 兜底：使用 r.jina.ai 前缀方式（不需要 API Key）
+            jina_url = f"https://r.jina.ai/{url}"
+            headers = {}
+            logger.info(f"Using r.jina.ai (fallback): {jina_url}")
 
         try:
-            response = self.client.get(jina_url)
+            response = self.client.get(jina_url, headers=headers)
             response.raise_for_status()
             content = response.text
 
@@ -69,17 +91,94 @@ class ContentFetcher:
         """
         logger.info(f"Fetching WeChat article: {url}")
 
-        # 微信文章通常需要专用 MCP 或特殊处理
-        # Jina Reader 对微信文章支持不佳，容易超时
-        logger.warning("微信文章获取失败 - Jina Reader 对微信文章支持有限")
-        logger.warning("建议：使用微信文章专用 MCP 或手动复制内容")
+        # 优先使用 WeChat MCP 服务器
+        if WECHAT_MCP_AVAILABLE:
+            try:
+                fetcher = WeChatArticleFetcher()
+                result = fetcher.get_an_article(url)
 
+                if result["content_flag"] == 1:
+                    article_info = fetcher.format_content(result["content"])
+                    logger.info(f"✓ 使用 WeChat MCP 成功获取: {article_info['article_title']}")
+                    return {
+                        "url": url,
+                        "title": article_info["article_title"],
+                        "author": article_info["author"],
+                        "content": "\n".join(article_info["format_texts"]),
+                        "nickname": article_info["nickname"],
+                        "createTime": article_info["createTime"],
+                    }
+                else:
+                    logger.warning(f"WeChat MCP 获取失败: {result.get('error', 'Unknown')}")
+            except Exception as e:
+                logger.warning(f"WeChat MCP 异常: {e}")
+
+        # 如果有 Jina API Key，尝试使用
+        if self.jina_api_key:
+            logger.info("尝试使用 Jina Reader (with API key)")
+            content = self.fetch_with_jina(url)
+            if content:
+                return {"url": url, "title": "微信文章", "content": content}
+
+        # 兜底：使用 r.jina.ai
+        logger.info("使用 r.jina.ai 作为兜底方案")
+        content = self.fetch_with_jina(url)
+        if content:
+            return {"url": url, "title": "微信文章", "content": content}
+
+        # 完全失败
         return {
             "url": url,
-            "title": "微信文章（需要专用工具）",
-            "content": f"⚠️ 微信公众号文章需要专用工具处理\n\n链接: {url}\n\n建议：\n1. 使用微信文章专用 MCP\n2. 或手动复制文章内容",
-            "error": "wechat_not_supported",
+            "title": "微信文章（获取失败）",
+            "content": f"⚠️ 无法获取微信文章内容\n\n链接: {url}",
+            "error": "fetch_failed",
         }
+
+    def fetch_webpage(self, url: str) -> str:
+        """
+        抓取普通网页内容。
+
+        Args:
+            url: 网页 URL
+
+        Returns:
+            网页内容（Markdown 或文本格式）
+        """
+        logger.info(f"Fetching webpage: {url}")
+
+        # 优先使用 Web Scraping MCP
+        if WEB_SCRAPING_AVAILABLE:
+            try:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                }
+                response = requests.get(url, headers=headers, timeout=30, verify=False)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, "html.parser")
+
+                # 移除脚本和样式
+                for script in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                    script.decompose()
+
+                # 提取主要内容
+                main_content = (
+                    soup.find("main") or
+                    soup.find("article") or
+                    soup.find("div", class_=re.compile(r"content|main|article", re.I)) or
+                    soup.body
+                )
+
+                if main_content:
+                    content = main_content.get_text(separator="\n", strip=True)
+                    logger.info(f"✓ 使用 Web Scraping 成功获取 {len(content)} 字符")
+                    return content
+            except Exception as e:
+                logger.warning(f"Web Scraping 失败: {e}")
+
+        # 回退到 Jina Reader
+        return self.fetch_with_jina(url)
 
     def fetch_github_repo(self, url: str) -> dict:
         """
@@ -93,8 +192,8 @@ class ContentFetcher:
         """
         logger.info(f"Fetching GitHub repo: {url}")
 
-        # 使用 Jina Reader API
-        content = self.fetch_with_jina(url)
+        # 使用网页抓取
+        content = self.fetch_webpage(url)
 
         # 从 URL 提取仓库信息
         pattern = r"github\.com/([^/]+)/([^/]+)"
@@ -136,7 +235,7 @@ class ContentFetcher:
             result.update(repo_info)
         else:
             result["type"] = "webpage"
-            result["content"] = self.fetch_with_jina(url)
+            result["content"] = self.fetch_webpage(url)
 
         return result
 
